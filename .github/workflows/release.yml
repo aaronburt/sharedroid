@@ -1,0 +1,99 @@
+name: Release
+
+# Runs when a version tag such as v0.1.0 is pushed. Tests the project, builds the release APK
+# and attaches it to a GitHub release. See "Releasing" in the README for the signing secrets.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Check the tag matches the app version
+        id: version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          APP_VERSION="$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)"
+          if [ "$TAG_VERSION" != "$APP_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match versionName $APP_VERSION in app/build.gradle.kts"
+            exit 1
+          fi
+          echo "version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Run the tests
+        run: ./gradlew :s3:test :http:test :ftp:test :app:testDebugUnitTest
+
+      - name: Prepare signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No signing secrets are set, so the APK will be built unsigned."
+          fi
+
+      - name: Build the release APK
+        env:
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease
+
+      - name: Collect the APK and the release notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SOURCE="$(ls app/build/outputs/apk/release/*.apk | head -n 1)"
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            NAME="ShareDroid-$VERSION.apk"
+          else
+            NAME="ShareDroid-$VERSION-unsigned.apk"
+          fi
+          cp "$SOURCE" "$NAME"
+          sha256sum "$NAME" > "$NAME.sha256"
+          echo "APK_NAME=$NAME" >> "$GITHUB_ENV"
+
+          # The changelog section for this version, without its heading.
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/ { exit }
+            found && /^\[[^]]+\]: / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if [ "${{ steps.signing.outputs.signed }}" != "true" ]; then
+            {
+              echo
+              echo "> This APK is **unsigned**: the repository had no signing secrets when it was built,"
+              echo "> so Android will not install it until it is signed."
+            } >> notes.md
+          fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$APK_NAME" "$APK_NAME.sha256" --clobber
+            gh release edit "$GITHUB_REF_NAME" --title "ShareDroid $VERSION" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" "$APK_NAME" "$APK_NAME.sha256" \
+              --title "ShareDroid $VERSION" --notes-file notes.md --verify-tag
+          fi

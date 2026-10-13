@@ -1,0 +1,40 @@
+name: Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Share a photo from Gallery
+        2. ...
+  - type: input
+    id: version
+    attributes:
+      label: ShareDroid version
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: Pixel 8, Android 15
+  - type: input
+    id: provider
+    attributes:
+      label: Storage provider
+      placeholder: AWS S3, Cloudflare R2, Backblaze B2, MinIO...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Remove any access keys, secrets or private URLs before pasting.
+      render: text
