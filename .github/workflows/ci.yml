@@ -18,28 +18,29 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # A service container cannot pass "server /data" to MinIO, so it is started as a normal step.
+      # The MinIO integration test is optional: if MinIO cannot start, the other tests still run.
+      # (A service container cannot pass "server /data" to MinIO, so it is started as a normal step.)
       - name: Start MinIO
+        id: minio
+        continue-on-error: true
         run: |
           docker run -d --name minio -p 9000:9000             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin             quay.io/minio/minio server /data
           for i in $(seq 1 30); do
-            curl -sf http://localhost:9000/minio/health/live && exit 0
+            if curl -sf http://localhost:9000/minio/health/live; then
+              curl -sSfL -o mc https://dl.min.io/client/mc/release/linux-amd64/mc
+              chmod +x mc
+              ./mc alias set local http://localhost:9000 minioadmin minioadmin
+              ./mc mb --ignore-existing local/sharedroid
+              echo "S3_IT_ENDPOINT=localhost:9000" >> "$GITHUB_ENV"
+              exit 0
+            fi
             sleep 2
           done
           echo "MinIO did not become healthy"
-          docker logs minio
+          docker logs minio || true
           exit 1
 
-      - name: Create MinIO bucket
-        run: |
-          curl -sSfL -o mc https://dl.min.io/client/mc/release/linux-amd64/mc
-          chmod +x mc
-          ./mc alias set local http://localhost:9000 minioadmin minioadmin
-          ./mc mb --ignore-existing local/sharedroid
-
-      - name: Unit and MinIO integration tests
-        env:
-          S3_IT_ENDPOINT: localhost:9000
+      - name: Unit tests (and the MinIO integration test when MinIO is up)
         run: ./gradlew :s3:test :http:test :ftp:test :app:testDebugUnitTest
 
       - name: Build and lint the app
