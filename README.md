@@ -47,15 +47,7 @@ Requires JDK 17+ and the Android SDK.
 ./gradlew :app:lintDebug                                       # Android lint
 ```
 
-Debug builds allow plain `http://` so a local test server is reachable from the emulator (`http://10.0.2.2:9000` for MinIO). Release builds only allow `https://`.
-
-To run the S3 integration test against a local MinIO:
-
-```sh
-docker run -p 9000:9000 minio/minio server /data
-# create a bucket named "sharedroid", then:
-S3_IT_ENDPOINT=localhost:9000 ./gradlew :s3:test
-```
+Debug builds allow plain `http://` so a local test server, such as MinIO, is reachable from the emulator at `http://10.0.2.2:9000`. Release builds only allow `https://`.
 
 ### Modules
 

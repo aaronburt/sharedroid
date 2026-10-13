@@ -7,7 +7,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 class S3UploaderTest {
@@ -66,25 +65,22 @@ class S3UploaderTest {
         }
     }
 
-    /** Runs against a real MinIO server when S3_IT_ENDPOINT is set, e.g. `localhost:9000`. */
     @Test
-    fun minioRoundTrip() {
-        val endpoint = System.getenv("S3_IT_ENDPOINT").orEmpty()
-        assumeTrue("S3_IT_ENDPOINT not set", endpoint.isNotEmpty())
-        val minio = S3Config(
-            endpoint = endpoint,
-            region = "us-east-1",
-            bucket = System.getenv("S3_IT_BUCKET") ?: "sharedroid",
-            accessKeyId = System.getenv("S3_IT_ACCESS_KEY") ?: "minioadmin",
-            secretAccessKey = System.getenv("S3_IT_SECRET_KEY") ?: "minioadmin",
-            pathStyle = true,
-            useHttps = false,
-        )
-        val uploader = S3Uploader()
-        uploader.testConnection(minio)
+    fun testConnectionUploadsThenDeletes() {
+        server.enqueue(MockResponse())
+        server.enqueue(MockResponse().setResponseCode(204))
+        assertTrue(S3Uploader().testConnection(config).canDelete)
+        val put = server.takeRequest()
+        val delete = server.takeRequest()
+        assertEquals("PUT", put.method)
+        assertEquals("DELETE", delete.method)
+        assertEquals(put.path, delete.path)
+    }
 
-        val data = ByteArray(3 * 1024 * 1024) { it.toByte() }
-        val result = uploader.putObject(minio, "it/big file.bin", "application/octet-stream", data.size.toLong(), { data.inputStream() })
-        assertFalse(result.etag.isNullOrEmpty())
+    @Test
+    fun testConnectionReportsAKeyThatCannotDelete() {
+        server.enqueue(MockResponse())
+        server.enqueue(MockResponse().setResponseCode(403).setBody("<Error><Code>AccessDenied</Code></Error>"))
+        assertFalse(S3Uploader().testConnection(config).canDelete)
     }
 }

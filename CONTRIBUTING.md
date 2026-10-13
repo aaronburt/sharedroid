@@ -32,7 +32,7 @@ The `s3` module is plain Kotlin, so its tests run without an emulator or device.
 - Kotlin, following the [official Kotlin style](https://kotlinlang.org/docs/coding-conventions.html). `.editorconfig` covers formatting.
 - UI is Jetpack Compose. No new XML layouts.
 - No proprietary or tracking dependencies (Firebase, Play Services, analytics SDKs). ShareDroid stays F-Droid compatible.
-- Never commit credentials. Tests that need S3 use MinIO, not a real account.
+- Never commit credentials. Tests use mock servers, never a real account.
 
 ## Adding a destination
 
