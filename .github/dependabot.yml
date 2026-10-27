@@ -9,6 +9,11 @@ updates:
         patterns: ["androidx.*"]
       kotlin:
         patterns: ["org.jetbrains.kotlin*", "org.jetbrains.kotlinx*"]
+    # core-ktx 1.19.1 and the Compose BOM 2026.09.00 need AGP 9.1.0+ and compileSdk 37.
+    # Ignored until the project moves to AGP 9.1 and compileSdk 37. Remove these entries then.
+    ignore:
+      - dependency-name: "androidx.core:core-ktx"
+      - dependency-name: "androidx.compose:compose-bom"
   - package-ecosystem: github-actions
     directory: /
     schedule:
